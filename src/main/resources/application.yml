@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: match-commissioner
+
+  data:
+    mongodb:
+      uri: mongodb+srv://sonbuithanh306_db_user:Ci6KgbXrppQflhml@cluster0.wooiayi.mongodb.net
+      database: Match-Comsummisioner
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+server:
+  servlet:
+    context-path: ${SERVER_CONTEXT_PATH}
+
+jwt:
+  expiration: ${JWT_EXPIRATION}
+  expiration-refresh-token: ${JWT_REFRESH_EXPIRATION}
+  secretKey: ${JWT_SECRET}
+
+
+logging:
+  file:
+    name: logs/match-commissioner.log  
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.mongodb.driver: WARN
