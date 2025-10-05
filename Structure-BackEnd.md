@@ -1,304 +1,259 @@
-# Match Commissioner -- Phase 1 (Backend)
+# Match Commissioner — Phase 1 (Backend, MongoDB)
 
-**Stack**: Spring Boot 3.x (Java 17+), Spring Web, Spring Data JPA,
-Spring Security (JWT), PostgreSQL, WebSocket/SSE, MapStruct (optional),
-Flyway, OpenAPI/Swagger
+**Stack**: Spring Boot 3.x (Java 17+), Spring Web, **Spring Data MongoDB**,  
+Spring Security (JWT), WebSocket/SSE, MapStruct (optional),  
+Mongock/FlywayDB-for-Mongo (for migration), OpenAPI/Swagger  
 
-Sports in scope: **Badminton, Pickleball, Tennis (Single/Double)**;
-**Football (Team 5/7/11)**. Volleyball excluded.
+**Sports supported:** Badminton, Pickleball, Tennis (Single/Double), Football (Team 5/7/11)
 
-------------------------------------------------------------------------
+---
 
-## 1) Domain Model (ERD -- simplified)
+## 1) Domain Model (ERD — simplified)
 
-``` text
-[Tournament]
-- id (PK)
-- name
-- sport_type: BADMINTON | PICKLEBALL | TENNIS | FOOTBALL
-- match_type: SINGLE | DOUBLE | TEAM
-- team_size: 5|7|11 (nullable, only for FOOTBALL)
-- start_date, end_date, status: DRAFT|SCHEDULED|ONGOING|FINISHED
-
-[Tournament] 1..n ---> [Participant]
-
-[Participant]
-- id (PK)
-- tournament_id (FK)
-- type: SINGLE|DOUBLE|TEAM
-- display_name (computed from players/team name)
-
-[Player]
-- id (PK)
-- full_name
-- dob (nullable), country (nullable)
-
-[Participant_Player] (for SINGLE/DOUBLE, and can also store football roster)
-- participant_id (FK)
-- player_id (FK)
-
-[Team] (Football only)
-- id (PK)
-- name
-
-[Team_Player]
-- team_id (FK)
-- player_id (FK)
-
-[Match]
-- id (PK)
-- tournament_id (FK)
-- round_name (e.g., Group A, R16, QF, SF, Final)
-- participant_a_id (FK)
-- participant_b_id (FK)
-- start_time, court (nullable), status: SCHEDULED|LIVE|FINISHED
-
-[Match_Score_Event] (real-time updates, optional but recommended)
-- id (PK)
-- match_id (FK)
-- ts, actor (A|B), value (points/goal), meta (JSON)
-
-[Match_Result]
-- match_id (PK/FK to Match)
-- score_a, score_b (string: "21-18, 18-21, 21-19" or integer for football goals)
-- winner_participant_id (FK)
-- notes
-- report_url (nullable)
+```text
+User
+  └── creates ──> Tournament
+                    └── has ──> TournamentEvent (category: Singles / Doubles / Team; gender: Male/Female/Mixed)
+                                  ├── has ──> Team ─── has ──> Player
+                                  └── has ──> Match ─── has (audit) ──> ScoreHistory
 ```
 
-> Note: Keeping **Participant** generic with a `type` allows one
-> scheduling/generation path across all sports.
+---
 
-------------------------------------------------------------------------
+## 2) Collections & Fields
 
-## 2) RESTful CRUD -- Endpoint Contract
+### 2.1 users
 
-Base URL prefix: `/api/v1`
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| user_id | ObjectId | Auto-generate (Not empty) |
+| first_name | string | min 2, max 50 (Not empty) |
+| last name | string | min 2, max 100 (Not empty) |
+| dob | string (dd/mm/yyyy) | Date format string (Not empty) |
+| gender | enum | Male / Female (Not empty) |
+| email | string | Must be valid email (Not empty, unique) |
+| password | string | Encoded, 6–30 chars, must contain lower/upper/number (Not empty) |
+| username | string | 5–30 chars, unique (Not empty) |
+| phonenumber | string | digits 10–11 (Not empty) |
+| created_at | string (dd/mm/yyyy) | (Not empty) |
+| avatar_url | string (url) | Optional |
+| last_login | Timestamp | Optional |
+| role | enum | ADMIN / REFEREE / MANAGER / USER (default USER) |
+| status | enum | ACTIVE / INACTIVE / BANNED (default ACTIVE) |
 
-### Auth (for Match Commissioner)
+---
 
--   `POST /auth/login` → { email, password } → JWT
--   `GET /auth/me` → profile
+### 2.2 tournament
 
-### Tournament
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| tournament_id | ObjectId | Auto-generate (Not empty) |
+| name_tournament | string | min 2, max 512 (Not empty) |
+| sport_type | enum | Badminton / Pickle Ball / Tennis / Football (Not empty) |
+| start_at | Timestamp | (Not empty) |
+| end_at | Timestamp | (Not empty) |
+| location | string | Validate later (Not empty) |
+| status | enum | UPCOMING / ONGOING / FINISHED (Not empty) |
+| created_by | user_id (ref) | (Not empty) |
+| teams | [team_id] | Can be empty before registration |
+| matches | [match_id] | Can be empty before schedule |
+| rule | object | Must include sport-type specific rules (Not empty) |
+| allow_gender | enum | Male / Female / ALL (Not empty) |
+| prize | object | Optional (overall) |
+| sponsors | [string] | Optional |
+| logo_url | string (url) | Optional |
+| events | [event_id] | Represent event categories (Not empty once created) |
 
--   `POST /tournaments` → create tournament
--   `GET /tournaments` → list
--   `GET /tournaments/{id}` → detail
--   `PUT /tournaments/{id}` → update (name, dates, config ...)
--   `DELETE /tournaments/{id}`
--   `POST /tournaments/{id}/generate-matches` → run scheduler (RR/KO)
--   `POST /tournaments/{id}/finish` → finalize entire tournament + build
-    tournament report
+---
 
-### Participant (Players / Doubles / Teams)
+### 2.3 tournament_events
 
--   `POST /tournaments/{id}/participants` → add participant (payload
-    varies by `match_type`)
--   `GET /tournaments/{id}/participants` → list
--   `GET /participants/{pid}` → detail
--   `PUT /participants/{pid}` → update
--   `DELETE /participants/{pid}`
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| event_id | ObjectId | Auto-generate (Not empty) |
+| tournament_id | tournament_id (ref) | (Not empty) |
+| event_name | string | min 2, max 128 (e.g., “Men Singles”, “Mixed Doubles”) (Not empty) |
+| type | enum | SINGLE / DOUBLE / TEAM (Not empty) |
+| gender | enum | Male / Female / Mixed (Not empty) |
+| rule | object | Inherit/override tournament.rule (Not empty) |
+| teams | [team_id] | Can be empty before registration |
+| matches | [match_id] | Can be empty before schedule |
+| prizes | object | gold/silver/bronze/encouragement etc. (Not empty) |
+| status | enum | UPCOMING / ONGOING / FINISHED (Not empty) |
+| winner_team_id | team_id (ref) | Can be empty until event finished |
 
-**Helpers**
+---
 
--   `POST /participants/{pid}/players` → add player(s) into participant
-    (single/double or football roster)
--   `DELETE /participants/{pid}/players/{playerId}`
--   `POST /teams` (football only) → create named Team
--   `POST /teams/{teamId}/players` → attach players to team
+### 2.4 teams
 
-### Match
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| team_id | ObjectId | Auto-generate (Not empty) |
+| team_name | string | min 2, max 128 (Not empty) |
+| tournament_id | [tournament_id] (ref) | (Not empty; team can join multiple tournaments) |
+| event_id | event_id (ref) | (Not empty; identify which event this team belongs to) |
+| players | [player_id] (ref) | Must match gender restriction (Not empty) |
+| country | string | min 2, max 128 (Not empty) |
+| seed | number | Optional |
+| coach | player_id (ref) | (Not empty) |
+| captain | player_id (ref) | (Not empty) |
+| logo_url | string (url) | Optional |
 
--   `GET /tournaments/{id}/matches` → list by tournament
--   `GET /matches/{mid}` → detail
--   `PUT /matches/{mid}` → reschedule/court/status
--   `DELETE /matches/{mid}`
+---
 
-**Real-time score**
+### 2.5 players
 
--   `POST /matches/{mid}/events` → append score event (point/goal)
-    (transitions SCHEDULED→LIVE)
--   `GET /matches/{mid}/events` → fetch history
--   WebSocket: `/ws/live` topic `match.{mid}` to publish score updates
-    (or SSE: `/matches/{mid}/stream`)
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| player_id | ObjectId | Auto-generate (Not empty) |
+| player_first_name | string | min 2, max 50 (Not empty) |
+| player_last_name | string | min 2, max 50 (Not empty) |
+| nickname | string | Optional (for display) |
+| gender | enum | Male / Female (Not empty) |
+| height_cm | double | (Not empty) |
+| weight_kg | double | (Not empty) |
+| ranking | string / enum | Optional |
+| team_id | [team_id] (ref) | One player can join multiple teams (Not empty) |
+| urgent_phonenumber | string | digits 10–11 (Optional) |
+| photo_url | string (url) | Optional |
+| social_link | string (url) | Optional |
+| dob | string (dd/mm/yyyy) | Optional |
 
-**Finalize & reports**
+---
 
--   `PUT /matches/{mid}/finalize` → { scoreA, scoreB, winnerId, notes? }
-    → create `Match_Result`
--   `POST /matches/{mid}/report` → (re)generate match PDF → returns {
-    reportUrl }
+### 2.6 matches
 
-### Report (Tournament)
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| match_id | ObjectId | Auto-generate (Not empty) |
+| tournament_id | tournament_id (ref) | (Not empty) |
+| event_id | event_id (ref) | (Not empty) |
+| round | string | e.g., Group A, QF, SF, Final (Not empty) |
+| team_a | team_id (ref) | (Not empty) |
+| team_b | team_id (ref) | (Not empty) |
+| status | enum | SCHEDULE / ONGOING / FINISHED / CANCELLED (Not empty) |
+| score | object | sport-based scoring structure (Not empty) |
+| filed_number | string | e.g., “Field 3” or “Court A” (Optional) |
+| winner_team_id | team_id (ref) | Optional before finish |
+| start_time | Timestamp | Optional |
+| end_time | Timestamp | Optional |
+| referee_id | user_id (ref) | Optional |
+| video_url | string (url) | Optional |
 
--   `POST /tournaments/{id}/report` → generate tournament report
-    PDF/Excel summary → { reportUrl }
+---
 
-------------------------------------------------------------------------
+### 2.7 scores
 
-## 3) Use Cases (Happy Paths)
+| Field | Type | Constraints / Notes |
+|---|---|---|
+| score_id | ObjectId | Auto-generate (Not empty) |
+| match_id | match_id (ref) | (Not empty) |
+| history | array | Track updates over time |
+| sets | array | Example: [ {setNumber:1, teamA:21, teamB:18}, ... ] |
+| winner_team_id | team_id (ref) | (Not empty) |
+| updated_at | Timestamp | (Not empty) |
 
-### UC-01 Create Tournament
+---
 
-1.  Commissioner calls `POST /tournaments` with { name, sport_type,
-    match_type, team_size? }
-2.  System returns tournament id with status `DRAFT`.
+## 3) RESTful API (v1)
 
-### UC-02 Register Participants
+| Resource | Methods | Description |
+|---|---|---|
+| Auth | POST /auth/login, GET /auth/me | Login / get profile |
+| Tournaments | POST /tournaments, GET /tournaments, GET /tournaments/{id}, PUT /tournaments/{id}, DELETE /tournaments/{id} | CRUD tournament |
+| Events | POST /tournaments/{id}/events, GET /tournaments/{id}/events | Manage tournament events/categories |
+| Teams | POST /teams, GET /teams/{id}, PUT /teams/{id}, DELETE /teams/{id} | CRUD team |
+| Players | POST /players, GET /players/{id}, PUT /players/{id}, DELETE /players/{id} | CRUD player |
+| Matches | GET /tournaments/{id}/matches, GET /matches/{mid}, PUT /matches/{mid}, DELETE /matches/{mid} | Manage matches |
+| Scores / Events | POST /matches/{mid}/events, GET /matches/{mid}/events | Live scoring updates (WebSocket/SSE support) |
+| Reports | POST /matches/{mid}/report, POST /tournaments/{id}/report | Generate match/tournament reports |
 
--   **Racket sports (single/double)**: commissioner posts players
-    (single) or pairs (double) via
-    `POST /tournaments/{id}/participants`.
--   **Football**: commissioner creates participants as **teams** and
-    attaches players until size (5/7/11) satisfied.
+---
 
-### UC-03 Generate Matches (Scheduling)
+## 4) Typical Use Cases
 
-1.  Commissioner triggers `POST /tournaments/{id}/generate-matches` with
-    config { format: ROUND_ROBIN\|KNOCKOUT, shuffle: true, courts? }.
-2.  System creates `Match` rows with pairings/rounds → tournament status
-    `SCHEDULED`.
+| UC | Description |
+|---|---|
+| UC-01 | Create tournament → status UPCOMING |
+| UC-02 | Create tournament events (Men Singles, Mixed Doubles, etc.) |
+| UC-03 | Register teams/players per event |
+| UC-04 | Generate match fixtures automatically |
+| UC-05 | Real-time scoring updates via WebSocket/SSE |
+| UC-06 | Finalize match → generate PDF report |
+| UC-07 | Finish tournament → aggregate event results and publish full report |
 
-### UC-04 Live Scoring
+---
 
-1.  During the match, commissioner (or table official) posts events via
-    `POST /matches/{mid}/events` (e.g., `{ actor:"A", value:1 }`).
-2.  Backend publishes to topic `match.{mid}` via WebSocket; Viewers
-    subscribe to see real-time scoreboard.
+## 5) Real-time Flow (simplified)
 
-### UC-05 Finalize Match
-
-1.  At match end, commissioner calls `PUT /matches/{mid}/finalize` with
-    final score(s) & `winnerId`.
-2.  System sets match `status=FINISHED`, stores `Match_Result`.
-3.  System (or user) calls `POST /matches/{mid}/report` → generate Match
-    Report PDF.
-
-### UC-06 Finish Tournament
-
-1.  When all matches finished, commissioner calls
-    `POST /tournaments/{id}/report` to generate final summary (ranking,
-    results, brackets).
-2.  Optionally `POST /tournaments/{id}/finish` to mark tournament
-    `FINISHED`.
-
-------------------------------------------------------------------------
-
-## 4) Sequence Diagram (text)
-
-``` text
-User -> TournamentAPI: POST /tournaments
-TournamentAPI -> DB: insert Tournament
-User -> ParticipantAPI: POST /tournaments/{id}/participants (xN)
-ParticipantAPI -> DB: insert Participant (+ Participant_Player)
-User -> TournamentAPI: POST /tournaments/{id}/generate-matches
-TournamentAPI -> SchedulingService: build bracket/fixtures
-SchedulingService -> DB: insert Match (pairings)
-
-=== Live ===
+```text
 User -> MatchAPI: POST /matches/{mid}/events {actor, value}
-MatchAPI -> DB: insert Match_Score_Event
-MatchAPI -> LiveService: publish WebSocket match.{mid}
-Viewer <- LiveService: push update
-
-=== Finalize ===
-User -> MatchAPI: PUT /matches/{mid}/finalize {scoreA, scoreB, winnerId}
-MatchAPI -> DB: upsert Match_Result, update Match.status=FINISHED
-User -> ReportAPI: POST /matches/{mid}/report
-ReportAPI -> ReportService: create PDF
-ReportService -> Storage: upload PDF (return URL)
-User <- ReportAPI: {reportUrl}
-
-=== Tournament Report ===
-User -> ReportAPI: POST /tournaments/{id}/report
-ReportAPI -> ReportService: aggregate standings & results
-ReportService -> Storage: upload PDF/Excel
-User <- ReportAPI: {reportUrl}
+MatchAPI -> MongoDB: insert ScoreHistory
+MatchAPI -> WebSocketPublisher: send to /topic/match.{mid}
+Viewer <- WebSocket: receive updated score
 ```
 
-------------------------------------------------------------------------
+---
 
-## 5) Scheduling Service -- Algorithms (overview)
+## 6) Scheduling Logic
 
--   **Knockout (Single-elim)**: seed participants, handle byes
-    (power-of-two), generate rounds R32/R16/QF/SF/Final.
--   **Round Robin**: circle method; for odd number, add BYE; compute
-    fixtures per round.
--   **Football group → knockout (optional)**: RR in groups → top N
-    advance to KO.
+| Format | Algorithm | Note |
+|---|---|---|
+| Knockout | Power-of-2 bracket; handle byes | Generate R32/R16/QF/SF/Final |
+| Round Robin | Circle method (odd teams add BYE) | Compute fixtures per round |
+| Football group | RR → top N advance → knockout | Group and bracket hybrid |
 
-> Store `round_name` and optional `group_name` in `Match` to support
-> both styles.
+---
 
-------------------------------------------------------------------------
-
-## 6) Example Payloads
+## 7) Example JSON Payloads
 
 ### Create Tournament (Badminton Double)
-
-``` json
+```json
 POST /api/v1/tournaments
 {
   "name": "HCMC Open 2025",
-  "sportType": "BADMINTON",
-  "matchType": "DOUBLE",
-  "startDate": "2025-10-10",
-  "endDate": "2025-10-12"
+  "sportType": "Badminton",
+  "startAt": "2025-10-10T00:00:00Z",
+  "endAt": "2025-10-12T00:00:00Z"
 }
 ```
 
-### Add Participant (Double)
-
-``` json
-POST /api/v1/tournaments/{id}/participants
+### Add Event (Mixed Doubles)
+```json
+POST /api/v1/tournaments/{id}/events
 {
+  "eventName": "Mixed Doubles",
   "type": "DOUBLE",
-  "players": [
-    { "fullName": "Nguyen A" },
-    { "fullName": "Tran B" }
-  ]
+  "gender": "Mixed",
+  "rule": { "setsToWin": 2, "pointsPerSet": 21 }
 }
 ```
 
-### Add Football Team (7-a-side)
-
-``` json
-POST /api/v1/tournaments/{id}/participants
+### Add Team to Event
+```json
+POST /api/v1/events/{eid}/teams
 {
-  "type": "TEAM",
-  "team": {
-    "name": "RND United",
-    "players": [
-      {"fullName":"Son Bui"}, {"fullName":"Tri Mai"}, {"fullName":"Luan Nguyen"},
-      {"fullName":"A"},{"fullName":"B"},{"fullName":"C"},{"fullName":"D"}
-    ]
-  }
+  "teamName": "Nguyen/Tran Duo",
+  "players": ["p1", "p2"],
+  "country": "VN"
 }
 ```
 
 ### Live Score Event
-
-``` json
+```json
 POST /api/v1/matches/{mid}/events
 {
-  "actor": "A",  
+  "actor": "A",
   "value": 1,
-  "meta": { "rally":"smash" }
+  "meta": { "rally": "smash" }
 }
 ```
 
-### Finalize Match & Report
-
-``` json
+### Finalize Match
+```json
 PUT /api/v1/matches/{mid}/finalize
-{ "scoreA": "21-18, 21-19", "scoreB": "18-21, 19-21", "winnerId": 123 }
-
-POST /api/v1/matches/{mid}/report
+{
+  "scoreA": "21-18, 19-21, 21-17",
+  "winnerId": "team1"
+}
 ```
-
-------------------------------------------------------------------------
-
-## 7) JPA Entities (concise)
-
-... (omitted here for brevity in code)
