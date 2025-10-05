@@ -27,5 +27,10 @@ public class MatchCommissionerApplication {
 
 		SpringApplication.run(MatchCommissionerApplication.class, args);
 	}
+	// docker rm -f match-commissioner-backend
+	// docker build --no-cache -t match-commissioner-backend .
+
 	// docker run -p 8080:8080 --env-file .env match-commissioner-backend
+	// docker run -d --name match-commissioner-backend -p 8080:8080 --env-file .env match-commissioner-backend
+
 }
