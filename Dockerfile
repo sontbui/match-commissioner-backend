@@ -7,7 +7,6 @@ RUN mvn dependency:go-offline -B
 
 
 COPY src ./src
-COPY .env .env
 RUN mvn clean package -DskipTests
 
 # -------- STAGE 2: RUN APP --------
@@ -15,7 +14,7 @@ FROM eclipse-temurin:17-jdk
 WORKDIR /app
 
 COPY --from=build /app/target/*.jar app.jar
-COPY .env   .env
+
 
 # Expose port 8080
 EXPOSE 8080
