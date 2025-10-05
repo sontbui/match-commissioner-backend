@@ -4,8 +4,9 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb+srv://sonbuithanh306_db_user:Ci6KgbXrppQflhml@cluster0.wooiayi.mongodb.net
-      database: Match-Comsummisioner
+      # uri: mongodb+srv://sonbuithanh306_db_user:Ci6KgbXrppQflhml@cluster0.wooiayi.mongodb.net
+      uri: ${MONGO_URI}
+      database: ${MONGO_DB}
 
 management:
   endpoints:
