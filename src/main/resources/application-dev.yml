@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: match-commissioner
+
+  data:
+    mongodb:
+      uri: mongodb+srv://sonbuithanh306_db_user:matchcommissioner_db_270803_sontbui@cluster0.fvczdgz.mongodb.net/MatchCommissioner?retryWrites=true&w=majority&appName=Cluster0
+      database: MatchCommissioner
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+server:
+  servlet:
+    context-path: /api/v1
+
+jwt:
+  expiration: 2592000
+  expiration-refresh-token: 5184000
+  secretKey: u4uXU3RQCE9L7t7aygIbV9w0T5fTbq1WkR3ZJ8X7aSo=
+
+
+logging:
+  file:
+    name: logs/match-commissioner.log  
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.mongodb.driver: WARN
+
+
