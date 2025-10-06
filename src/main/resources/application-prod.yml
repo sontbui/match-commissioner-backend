@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: match-commissioner
+
+  data:
+    mongodb:
+      uri: ${MONGO_URI}
+      database: ${MONGO_DB}
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      timeout: 2000ms
+    kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: ${KAFKA_MECHANISM}
+      sasl.jaas.config: >
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="${KAFKA_API_KEY}"
+        password="${KAFKA_API_SECRET}";
+    consumer:
+      group-id: match-commissioner-group
+      auto-offset-reset: earliest
+      enable-auto-commit: true
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+      compression-type: lz4
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+server:
+  servlet:
+    context-path: ${SERVER_CONTEXT_PATH}
+
+jwt:
+  expiration: ${JWT_EXPIRATION}
+  expiration-refresh-token: ${JWT_REFRESH_EXPIRATION}
+  secretKey: ${JWT_SECRET}
+
+logging:
+  file:
+    name: logs/match-commissioner.log
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.mongodb.driver: WARN
