@@ -34,3 +34,7 @@ build/
 
 /logs
 .env
+
+*.log
+*.iml
+/.idea

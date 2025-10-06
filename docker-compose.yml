@@ -6,5 +6,6 @@ services:
       - "8080:8080"
     env_file: .env
     volumes:
-      - .:/app
+      - ./src:/app/src
+      - ./target:/app/target
     command: ./mvnw spring-boot:run
