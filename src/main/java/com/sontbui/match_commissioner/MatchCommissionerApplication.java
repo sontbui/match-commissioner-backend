@@ -33,6 +33,8 @@ public class MatchCommissionerApplication {
 
 		SpringApplication.run(MatchCommissionerApplication.class, args);
 		
+		System.out.println("✅ Running on port: " + System.getenv("PORT"));
+
 		System.out.println("✅ Match Commissioner started with profile: " +
 				Arrays.toString(SpringApplication.run(MatchCommissionerApplication.class, args)
 						.getEnvironment().getActiveProfiles()));
