@@ -19,6 +19,13 @@ COPY --from=build /app/target/*.jar app.jar
 # Expose port 8080
 EXPOSE 8080
 
+# Health check script
+COPY healthcheck.sh /healthcheck.sh
+RUN chmod +x /healthcheck.sh
 
-# Run application
+# -------- HEALTH CHECK --------
+HEALTHCHECK --interval=250s --timeout=5s --start-period=20s --retries=3 \
+  CMD /healthcheck.sh
+
+# -------- ENTRYPOINT --------
 ENTRYPOINT ["java","-jar","app.jar"]
