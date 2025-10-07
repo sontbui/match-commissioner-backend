@@ -31,9 +31,7 @@ public class MatchCommissionerApplication {
 			System.out.println("Running with profile: " + activeProfile + " (no .env file loaded)");
 		}
 
-		// SpringApplication.run(MatchCommissionerApplication.class, args);
-
-		
+		// SpringApplication.run(MatchCommissionerApplication.class, args);	
 
 		System.out.println("✅ Match Commissioner started with profile: " +
 				Arrays.toString(SpringApplication.run(MatchCommissionerApplication.class, args)
